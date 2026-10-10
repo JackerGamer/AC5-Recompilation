@@ -1,3 +1,5 @@
+/* Modified by JackerGamer (2026): keyboard + mouse controls, analog anti-dead zone,
+   Simplified Chinese menu, Square latch, ov_bbox fix.  See README.md. */
 #include "ps2_runtime.h"
 #include "ps2_hle.h"
 #include "ps2_statecap.h"
@@ -2925,8 +2927,10 @@ static void ov_bbox(const vk_draw *d, s32 *x0, s32 *y0, s32 *x1, s32 *y1) {
     *y0 = by0 < 0.0f ? 0 : (s32)by0 / OV_CELL;
     *x1 = bx1 < 0.0f ? -1 : (s32)bx1 / OV_CELL;
     *y1 = by1 < 0.0f ? -1 : (s32)by1 / OV_CELL;
-    if (*x1 >= OV_CW) *x1 = OV_CW - 1;
-    if (*y1 >= OV_CH) *y1 = OV_CH - 1;
+    /* signed compare: -1 (box wholly off the left/top edge) must stay an
+       empty range, not wrap to UINT_MAX and clamp to the whole grid */
+    if (*x1 >= (s32)OV_CW) *x1 = (s32)OV_CW - 1;
+    if (*y1 >= (s32)OV_CH) *y1 = (s32)OV_CH - 1;
 }
 
 static int ov_colourless(const vk_draw *d) {
@@ -4123,32 +4127,157 @@ void ps2_video_select_gamepad(SDL_JoystickID id) {
     ps2_log("pad: %s selected", SDL_GetGamepadName(gamepad));
 }
 
+/* Mouse as a controller, captured (relative mode) while the game has focus
+   and the menu is closed.  Mouse X drives L2/R2, mouse Y the left stick's Y
+   axis; with Space held both drive the right stick instead.  The buttons
+   are Cross, Triangle, Circle (mouse 4) and Square (mouse 5), and a wheel
+   notch presses Select.  A key held for an axis shuts the mouse out of it. */
+#define MOUSE_COUNTS_FULL 250.0f   /* counts to full deflection at sensitivity 1 */
+#define MOUSE_SELECT_NS   100000000ull
+
+static int mouse_captured, mouse_skip, mouse_wait_release;
+static float mouse_fly[2], mouse_look[2];
+static Uint64 mouse_last_ns, mouse_select_until;
+
+static void mouse_capture(int want) {
+    if (want == mouse_captured) return;
+    if (!SDL_SetWindowRelativeMouseMode(window, want)) {
+        static int said;
+        if (!said++) ps2_log("pad: cannot capture the mouse: %s", SDL_GetError());
+        return;
+    }
+    mouse_captured = want;
+    mouse_skip = 1;
+    mouse_wait_release = 1;     /* the click that focused the window is not Cross */
+    mouse_last_ns = 0;
+    mouse_select_until = 0;
+    mouse_fly[0] = mouse_fly[1] = mouse_look[0] = mouse_look[1] = 0.0f;
+}
+
+static float mouse_clamp(float v) { return v < -1.0f ? -1.0f : v > 1.0f ? 1.0f : v; }
+
+static float mouse_shape(float v, float dz) {
+    float a = fabsf(v);
+    if (a <= dz) return 0.0f;
+    a = (a - dz) / (1.0f - dz);
+    if (a > 1.0f) a = 1.0f;
+    return v < 0.0f ? -a : a;
+}
+
+static void mouse_put(float *neg, float *pos, float v) {
+    if (v < 0.0f) *neg = -v;
+    else *pos = v;
+}
+
+static void mouse_input(const bool *keys, const float *kb, float *ms) {
+    const SDL_MouseButtonFlags any = SDL_BUTTON_LMASK | SDL_BUTTON_RMASK
+                                   | SDL_BUTTON_X1MASK | SDL_BUTTON_X2MASK;
+    float dx = 0.0f, dy = 0.0f, s, decay, dzm, fx, fy, lx, ly;
+    Uint64 now = SDL_GetTicksNS();
+    float dt = mouse_last_ns ? (float)(now - mouse_last_ns) * 1e-9f : 0.0f;
+    SDL_MouseButtonFlags b = SDL_GetRelativeMouseState(&dx, &dy);
+    int look = keys && keys[SDL_SCANCODE_SPACE];
+
+    mouse_last_ns = now;
+    if (dt > 0.1f) dt = 0.1f;
+    if (mouse_skip) { mouse_skip = 0; dx = dy = 0.0f; }
+    if (mouse_wait_release) {
+        if (!(b & any)) mouse_wait_release = 0;
+        b = 0;
+    }
+
+    s = ps2_cfg.mouse_sens / MOUSE_COUNTS_FULL;
+    if (look) {
+        /* the look stick holds where it is put until Space is let go */
+        mouse_look[0] = mouse_clamp(mouse_look[0] + dx * s);
+        mouse_look[1] = mouse_clamp(mouse_look[1] + dy * s);
+        dx = dy = 0.0f;
+    } else {
+        mouse_look[0] = mouse_look[1] = 0.0f;
+    }
+    decay = ps2_cfg.mouse_recenter > 0.0f ? expf(-ps2_cfg.mouse_recenter * dt) : 1.0f;
+    mouse_fly[0] = mouse_clamp(mouse_fly[0] * decay + dx * s);
+    mouse_fly[1] = mouse_clamp(mouse_fly[1] * decay + dy * s);
+
+    dzm = ps2_cfg.mouse_deadzone;
+    fx = mouse_shape(mouse_fly[0], dzm);
+    fy = mouse_shape(mouse_fly[1], dzm);
+    lx = mouse_shape(mouse_look[0], dzm);
+    ly = mouse_shape(mouse_look[1], dzm);
+    if (ps2_cfg.mouse_invert_y) fy = -fy;
+
+    if (!kb[PS2_ACT_L2] && !kb[PS2_ACT_R2])
+        mouse_put(&ms[PS2_ACT_L2], &ms[PS2_ACT_R2], fx);
+    if (!kb[PS2_ACT_LS_UP] && !kb[PS2_ACT_LS_DOWN])
+        mouse_put(&ms[PS2_ACT_LS_UP], &ms[PS2_ACT_LS_DOWN], fy);
+    if (!kb[PS2_ACT_RS_LEFT] && !kb[PS2_ACT_RS_RIGHT])
+        mouse_put(&ms[PS2_ACT_RS_LEFT], &ms[PS2_ACT_RS_RIGHT], lx);
+    if (!kb[PS2_ACT_RS_UP] && !kb[PS2_ACT_RS_DOWN])
+        mouse_put(&ms[PS2_ACT_RS_UP], &ms[PS2_ACT_RS_DOWN], ly);
+
+    if (b & SDL_BUTTON_LMASK)  ms[PS2_ACT_CROSS] = 1.0f;
+    if (b & SDL_BUTTON_RMASK)  ms[PS2_ACT_TRIANGLE] = 1.0f;
+    if (b & SDL_BUTTON_X1MASK) ms[PS2_ACT_CIRCLE] = 1.0f;
+    if (b & SDL_BUTTON_X2MASK) ms[PS2_ACT_SQUARE] = 1.0f;
+    if (now < mouse_select_until) ms[PS2_ACT_SELECT] = 1.0f;
+}
+
 static void poll_input(void) {
     const bool *keys = window_hidden ? NULL : SDL_GetKeyboardState(NULL);
     ps2_pad_state st;
     u16 kbmask = 0;
-    float value[PS2_ACT_COUNT];
+    float value[PS2_ACT_COUNT], kb[PS2_ACT_COUNT], ms[PS2_ACT_COUNT];
     float dz = ps2_cfg.deadzone;
     int env = pad_deadzone_env();
+    int focused = !window_hidden && (SDL_GetWindowFlags(window) & SDL_WINDOW_INPUT_FOCUS);
     memset(&st, 0, sizeof(st));
     st.connected = 1;
     st.lx = st.ly = st.rx = st.ry = PS2_PAD_ANALOG_NEUTRAL;
+    mouse_capture(ps2_cfg.mouse_enabled && focused && !ps2_ui_visible());
     if (ps2_ui_blocks_game_input()) { ps2_pad_publish(0, &st); return; }
 
+    memset(kb, 0, sizeof kb);
+    memset(ms, 0, sizeof ms);
     for (int act = 0; act < PS2_ACT_COUNT; act++) {
         float v = 0.0f;
         for (int k = 0; k < PS2_BIND_SLOTS; k++) {
             int sc = ps2_cfg.key[act][k], code = ps2_cfg.pad[act][k];
-            if (keys && sc > 0 && sc < SDL_SCANCODE_COUNT && keys[sc]) {
-                v = 1.0f;
-                if (act < PS2_ACT_BUTTONS) kbmask |= (u16)(1u << act);
-            }
+            if (keys && sc > 0 && sc < SDL_SCANCODE_COUNT && keys[sc]) kb[act] = 1.0f;
             if (gamepad && code > 0) {
                 float p = padbind_value(code);
                 if (p > v) v = p;
             }
         }
         value[act] = v;
+    }
+    /* Alt turns the left-stick keys into the D-pad, and keeps Alt+Enter
+       (fullscreen) from also pressing Start. */
+    if (keys && (keys[SDL_SCANCODE_LALT] || keys[SDL_SCANCODE_RALT])) {
+        static const int dpad[4] = { PS2_ACT_UP, PS2_ACT_DOWN, PS2_ACT_LEFT, PS2_ACT_RIGHT };
+        for (int i = 0; i < 4; i++) {
+            if (kb[PS2_ACT_LS_UP + i] > 0.0f) kb[dpad[i]] = 1.0f;
+            kb[PS2_ACT_LS_UP + i] = 0.0f;
+        }
+        kb[PS2_ACT_START] = 0.0f;
+    }
+    if (mouse_captured) mouse_input(keys, kb, ms);
+    for (int act = 0; act < PS2_ACT_COUNT; act++) {
+        float v = kb[act] > ms[act] ? kb[act] : ms[act];
+        if (act < PS2_ACT_BUTTONS && kb[act] > 0.0f) kbmask |= (u16)(1u << act);
+        if (v > value[act]) value[act] = v;
+    }
+    /* Square latches: each press steps it from released to held at half
+       pressure, then held at full pressure, then released again. */
+    {
+        static int sq_step, sq_was_down;
+        int down = ps2_pad_button(ps2_cfg.button_deadzone, value[PS2_ACT_SQUARE]);
+        if (down && !sq_was_down) sq_step = (sq_step + 1) % 3;
+        sq_was_down = down;
+        value[PS2_ACT_SQUARE] = 0.0f;
+        if (sq_step) {
+            st.buttons |= (u16)(1u << PS2_ACT_SQUARE);
+            st.sq = sq_step == 1 ? 128 : 255;
+        }
     }
     for (int act = 0; act < PS2_ACT_BUTTONS; act++) {
         int held;
@@ -4161,9 +4290,9 @@ static void poll_input(void) {
         if (held) st.buttons |= (u16)(1u << act);
     }
     if (env >= 0) dz = (float)env / 32767.0f;
-    ps2_pad_stick(dz, ps2_cfg.axis_scale, ps2_cfg.invert[0], value + PS2_ACT_LS_UP,
+    ps2_pad_stick(dz, ps2_cfg.anti_deadzone, ps2_cfg.axis_scale, ps2_cfg.invert[0], value + PS2_ACT_LS_UP,
                   &st.lx, &st.ly);
-    ps2_pad_stick(dz, ps2_cfg.axis_scale, ps2_cfg.invert[1], value + PS2_ACT_RS_UP,
+    ps2_pad_stick(dz, ps2_cfg.anti_deadzone, ps2_cfg.axis_scale, ps2_cfg.invert[1], value + PS2_ACT_RS_UP,
                   &st.rx, &st.ry);
 
     if (PS2_ENV("PS2_TRACE_PAD")) {
@@ -4478,6 +4607,10 @@ static void pump_events(void) {
             break;
         case SDL_EVENT_GAMEPAD_REMOVED:
             if (gamepad) { SDL_CloseGamepad(gamepad); gamepad = NULL; }
+            break;
+        case SDL_EVENT_MOUSE_WHEEL:
+            if (mouse_captured && e.wheel.y != 0.0f)
+                mouse_select_until = SDL_GetTicksNS() + MOUSE_SELECT_NS;
             break;
         case SDL_EVENT_KEY_DOWN:
             if (e.key.key == SDLK_ESCAPE && !window_hidden) window_closed = 1;

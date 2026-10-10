@@ -1,3 +1,5 @@
+/* Modified by JackerGamer (2026): keyboard + mouse controls, analog anti-dead zone,
+   Simplified Chinese menu, Square latch, ov_bbox fix.  See README.md. */
 #include "ps2_runtime.h"
 #include "ps2_settings.h"
 
@@ -77,26 +79,22 @@ const char *ps2_padbind_name(int code) {
 
 void ps2_settings_default_bindings(ps2_settings *s, int keyboard, int pad) {
     if (keyboard) {
+        /* Keyboard + mouse layout.  The face buttons, Select and the right
+           stick come from the mouse (poll_input); Alt turns the left-stick
+           keys into the D-pad. */
         memset(s->key, 0, sizeof s->key);
         s->key[PS2_ACT_START][0]    = SDL_SCANCODE_RETURN;
-        s->key[PS2_ACT_SELECT][0]   = SDL_SCANCODE_RSHIFT;
-        s->key[PS2_ACT_UP][0]       = SDL_SCANCODE_UP;
-        s->key[PS2_ACT_DOWN][0]     = SDL_SCANCODE_DOWN;
-        s->key[PS2_ACT_LEFT][0]     = SDL_SCANCODE_LEFT;
-        s->key[PS2_ACT_RIGHT][0]    = SDL_SCANCODE_RIGHT;
-        s->key[PS2_ACT_CROSS][0]    = SDL_SCANCODE_X;
-        s->key[PS2_ACT_SQUARE][0]   = SDL_SCANCODE_Z;
-        s->key[PS2_ACT_CIRCLE][0]   = SDL_SCANCODE_S;
-        s->key[PS2_ACT_TRIANGLE][0] = SDL_SCANCODE_A;
-        s->key[PS2_ACT_L1][0]       = SDL_SCANCODE_Q;
-        s->key[PS2_ACT_R1][0]       = SDL_SCANCODE_E;
-        s->key[PS2_ACT_L2][0]       = SDL_SCANCODE_1;
-        s->key[PS2_ACT_R2][0]       = SDL_SCANCODE_3;
+        s->key[PS2_ACT_L1][0]       = SDL_SCANCODE_LCTRL;
+        s->key[PS2_ACT_L1][1]       = SDL_SCANCODE_RCTRL;
+        s->key[PS2_ACT_R1][0]       = SDL_SCANCODE_LSHIFT;
+        s->key[PS2_ACT_R1][1]       = SDL_SCANCODE_RSHIFT;
+        s->key[PS2_ACT_L2][0]       = SDL_SCANCODE_Q;
+        s->key[PS2_ACT_R2][0]       = SDL_SCANCODE_E;
+        s->key[PS2_ACT_R3][0]       = SDL_SCANCODE_CAPSLOCK;
         s->key[PS2_ACT_LS_UP][0]    = SDL_SCANCODE_W;
-        s->key[PS2_ACT_LS_UP][1]    = SDL_SCANCODE_KP_8;
-        s->key[PS2_ACT_LS_DOWN][0]  = SDL_SCANCODE_KP_2;
-        s->key[PS2_ACT_LS_LEFT][0]  = SDL_SCANCODE_KP_4;
-        s->key[PS2_ACT_LS_RIGHT][0] = SDL_SCANCODE_KP_6;
+        s->key[PS2_ACT_LS_DOWN][0]  = SDL_SCANCODE_S;
+        s->key[PS2_ACT_LS_LEFT][0]  = SDL_SCANCODE_A;
+        s->key[PS2_ACT_LS_RIGHT][0] = SDL_SCANCODE_D;
     }
     if (pad) {
         memset(s->pad, 0, sizeof s->pad);
@@ -187,6 +185,13 @@ void ps2_settings_defaults(ps2_settings *s) {
     s->deadzone = 0.0f;
     s->axis_scale = 1.33f;
     s->button_deadzone = 0.0f;
+    s->anti_deadzone = 0.0f;
+    s->language = 0;
+    s->mouse_enabled = 1;
+    s->mouse_sens = 1.0f;
+    s->mouse_recenter = 8.0f;
+    s->mouse_deadzone = 0.05f;
+    s->mouse_invert_y = 1;
 }
 
 static float clampf(float v, float lo, float hi) {
@@ -237,6 +242,13 @@ static void sanitize(ps2_settings *s) {
     s->button_deadzone = clampf(s->button_deadzone, 0.0f, 1.0f);
     s->invert[0] = clampi(s->invert[0], 0, 3);
     s->invert[1] = clampi(s->invert[1], 0, 3);
+    s->anti_deadzone = clampf(s->anti_deadzone, 0.0f, 0.9f);
+    s->language = clampi(s->language, 0, 1);
+    s->mouse_enabled = s->mouse_enabled != 0;
+    s->mouse_sens = clampf(s->mouse_sens, 0.1f, 5.0f);
+    s->mouse_recenter = clampf(s->mouse_recenter, 0.0f, 30.0f);
+    s->mouse_deadzone = clampf(s->mouse_deadzone, 0.0f, 0.5f);
+    s->mouse_invert_y = s->mouse_invert_y != 0;
 }
 
 typedef struct {
@@ -278,12 +290,19 @@ static const cfg_field fields[] = {
     FI("display", "fps_limit", fps_limit, "0 off"),
     FI("display", "show_fps", show_fps, "1 on"),
     FF("display", "menu_scale", ui_scale, "0.5..3"),
+    FI("display", "language", language, "menu language: 0 English, 1 Simplified Chinese"),
     FI("input", "block_game_input_in_menu", block_input_in_menu, "1 on"),
     FF("analog", "deadzone", deadzone, "PCSX2 Analog Deadzone, both sticks, 0..1"),
     FF("analog", "axis_scale", axis_scale, "PCSX2 Analog Sensitivity, 0.01..2 (default 1.33)"),
     FF("analog", "button_deadzone", button_deadzone, "PCSX2 Button/Trigger Deadzone, 0..1"),
     FI("analog", "invert_left", invert[0], "0 none, 1 left/right, 2 up/down, 3 both"),
     FI("analog", "invert_right", invert[1], "0 none, 1 left/right, 2 up/down, 3 both"),
+    FF("analog", "anti_deadzone", anti_deadzone, "a stick pushed at all starts this far out, 0..0.9"),
+    FI("mouse", "enabled", mouse_enabled, "1 capture the mouse while playing"),
+    FF("mouse", "sensitivity", mouse_sens, "0.1..5"),
+    FF("mouse", "recenter", mouse_recenter, "flight axes return to centre at this rate per second; 0 = hold"),
+    FF("mouse", "deadzone", mouse_deadzone, "0..0.5"),
+    FI("mouse", "invert_y", mouse_invert_y, "1 mouse up = left stick down (nose up)"),
 };
 
 void ps2_settings_disable_file(void) {
@@ -459,8 +478,28 @@ float ps2_pad_axis_value(int raw, int positive) {
     return clampf(positive ? v : -v, 0.0f, 1.0f);
 }
 
-void ps2_pad_stick(float deadzone, float axis_scale, int invert, const float v[4],
-                   unsigned char *x, unsigned char *y) {
+static unsigned char stick_byte(float f) {
+    float b = f < 0.0f ? 127.0f + f * 127.0f : 127.0f + f * 128.0f;
+    return (unsigned char)clampf(b + 0.5f, 0.0f, 255.0f);
+}
+
+/* Anti-dead zone: a stick pushed at all is moved out to at least this
+   fraction of full travel, along its own direction, so the game's own dead
+   zone does not swallow small movements.  Full deflection is unchanged. */
+static void stick_anti_deadzone(float anti, unsigned char *x, unsigned char *y) {
+    float fx, fy, m, t;
+    if (anti <= 0.0f || (*x == 127 && *y == 127)) return;
+    fx = *x < 127 ? -(127 - *x) / 127.0f : (*x - 127) / 128.0f;
+    fy = *y < 127 ? -(127 - *y) / 127.0f : (*y - 127) / 128.0f;
+    m = sqrtf(fx * fx + fy * fy);
+    if (m <= 0.0f || m >= 1.0f) return;
+    t = anti + (1.0f - anti) * m;
+    *x = stick_byte(fx * t / m);
+    *y = stick_byte(fy * t / m);
+}
+
+void ps2_pad_stick(float deadzone, float anti_deadzone, float axis_scale, int invert,
+                   const float v[4], unsigned char *x, unsigned char *y) {
     unsigned raw[4], px, nx, py, ny;
     for (int i = 0; i < 4; i++)
         raw[i] = (unsigned char)clampf(v[i] * axis_scale * 255.0f, 0.0f, 255.0f);
@@ -483,6 +522,7 @@ void ps2_pad_stick(float deadzone, float axis_scale, int invert, const float v[4
             if (in_x && in_y) *x = *y = 127;
         }
     }
+    stick_anti_deadzone(anti_deadzone, x, y);
 }
 
 int ps2_pad_trigger(float button_deadzone, float value, unsigned char *pressure) {

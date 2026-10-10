@@ -1,3 +1,5 @@
+/* Modified by JackerGamer (2026): keyboard + mouse controls, analog anti-dead zone,
+   Simplified Chinese menu, Square latch, ov_bbox fix.  See README.md. */
 #include "ps2_runtime.h"
 #include "ps2_hle.h"
 #include "ps2_modapi.h"
@@ -364,7 +366,7 @@ void hle_scePad2Read(ps2_ctx *ctx) {
     d[10] = (buttons >> PAD_TRIANGLE) & 1 ? 255 : 0;
     d[11] = (buttons >> PAD_CIRCLE)   & 1 ? 255 : 0;
     d[12] = (buttons >> PAD_CROSS)    & 1 ? 255 : 0;
-    d[13] = (buttons >> PAD_SQUARE)   & 1 ? 255 : 0;
+    d[13] = (buttons >> PAD_SQUARE)   & 1 ? (st->sq ? st->sq : 255) : 0;
     d[14] = (buttons >> PAD_L1)       & 1 ? 255 : 0;
     d[15] = (buttons >> PAD_R1)       & 1 ? 255 : 0;
     d[16] = (buttons >> PAD_L2) & 1 ? ((st->buttons >> PAD_L2) & 1 ? st->l2 : 255) : 0;
@@ -518,7 +520,7 @@ void ps2_dbc_report(u32 obj, u32 recv, int rsize) {
     l2  = (buttons >> PAD_L2)       & 1 ? 255 : st->l2;
     r2  = (buttons >> PAD_R2)       & 1 ? 255 : st->r2;
     tri = (buttons >> PAD_TRIANGLE) & 1 ? 255 : 0;
-    sqr = (buttons >> PAD_SQUARE)   & 1 ? 255 : 0;
+    sqr = (buttons >> PAD_SQUARE)   & 1 ? (st->sq ? st->sq : 255) : 0;
 
     out[0] = st->lx;
     out[1] = st->ly;

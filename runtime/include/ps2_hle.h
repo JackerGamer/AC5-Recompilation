@@ -1,3 +1,5 @@
+/* Modified by JackerGamer (2026): keyboard + mouse controls, analog anti-dead zone,
+   Simplified Chinese menu, Square latch, ov_bbox fix.  See README.md. */
 #ifndef PS2_HLE_H
 #define PS2_HLE_H
 
@@ -51,6 +53,7 @@ typedef struct ps2_pad_state {
     u16 buttons;
     u8 lx, ly, rx, ry;
     u8 l2, r2;
+    u8 sq;      /* Square's pressure while held; 0 = full */
 } ps2_pad_state;
 extern ps2_pad_state ps2_pad_host[PS2_PAD_PORTS];
 

@@ -1,3 +1,5 @@
+/* Modified by JackerGamer (2026): keyboard + mouse controls, analog anti-dead zone,
+   Simplified Chinese menu, Square latch, ov_bbox fix.  See README.md. */
 #ifndef PS2_SETTINGS_H
 #define PS2_SETTINGS_H
 
@@ -67,6 +69,13 @@ typedef struct ps2_settings {
     float axis_scale;
     float button_deadzone;
     int   invert[2];
+    float anti_deadzone;
+    int   language;
+    int   mouse_enabled;
+    float mouse_sens;
+    float mouse_recenter;
+    float mouse_deadzone;
+    int   mouse_invert_y;
 } ps2_settings;
 
 extern ps2_settings ps2_cfg;
@@ -93,8 +102,8 @@ const char *ps2_padbind_name(int code);
 void ps2_settings_apply_game_patches(void);
 
 float ps2_pad_axis_value(int raw, int positive);
-void  ps2_pad_stick(float deadzone, float axis_scale, int invert, const float v[4],
-                    unsigned char *x, unsigned char *y);
+void  ps2_pad_stick(float deadzone, float anti_deadzone, float axis_scale, int invert,
+                    const float v[4], unsigned char *x, unsigned char *y);
 int   ps2_pad_trigger(float button_deadzone, float value, unsigned char *pressure);
 int   ps2_pad_button(float button_deadzone, float value);
 

@@ -33,3 +33,12 @@ tests/mods/mount_test/
 tests/mods/archive_test/
 tests/mods/bgm_test/
 tests/mods_resize/
+
+# game files and local state -- never commit these
+*.iso
+*.ISO
+SLUS_*
+*.lnk
+saves/
+ac5_settings.ini*
+ac5_pipelines.*
