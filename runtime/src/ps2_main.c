@@ -1,4 +1,4 @@
-/* Modified by JackerGamer (2026): UTF-8 console output for log lines.  See README.md. */
+/* Modified by JackerGamer (2026): UTF-8 console output; exit screenshot only with PS2_EXIT_SHOT.  See README.md. */
 #include "ps2_runtime.h"
 #include "ps2_settings.h"
 #include "ps2_hle.h"
@@ -232,7 +232,7 @@ void ps2_finish(const char *why) {
     ps2_dump_trace("run summary");
     if (video_active) {
         ps2_video_shutdown();
-        ps2_vk_screenshot("ps2_frame.ppm");
+        if (getenv("PS2_EXIT_SHOT")) ps2_vk_screenshot("ps2_frame.ppm");
     } else {
         dump_framebuffer("ps2_framebuffer.ppm");
     }
