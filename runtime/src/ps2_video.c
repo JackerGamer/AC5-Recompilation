@@ -4198,6 +4198,11 @@ static void mouse_input(const bool *keys, const float *kb, float *ms) {
     decay = ps2_cfg.mouse_recenter > 0.0f ? expf(-ps2_cfg.mouse_recenter * dt) : 1.0f;
     mouse_fly[0] = mouse_clamp(mouse_fly[0] * decay + dx * s);
     mouse_fly[1] = mouse_clamp(mouse_fly[1] * decay + dy * s);
+    /* the decay only approaches zero; below one step of the pad's 8-bit
+       range, call it zero, or L2/R2 would read as held long after the
+       mouse stopped */
+    for (int i = 0; i < 2; i++)
+        if (fabsf(mouse_fly[i]) < 1.0f / 255.0f) mouse_fly[i] = 0.0f;
 
     dzm = ps2_cfg.mouse_deadzone;
     fx = mouse_shape(mouse_fly[0], dzm);

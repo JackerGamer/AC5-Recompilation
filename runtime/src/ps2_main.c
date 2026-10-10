@@ -1,3 +1,4 @@
+/* Modified by JackerGamer (2026): UTF-8 console output for log lines.  See README.md. */
 #include "ps2_runtime.h"
 #include "ps2_settings.h"
 #include "ps2_hle.h"
@@ -426,6 +427,9 @@ static LONG WINAPI ps2_crash_filter(EXCEPTION_POINTERS *ep) {
 #endif
 
 int main(int argc, char **argv) {
+#ifdef _WIN32
+    SetConsoleOutputCP(CP_UTF8);    /* log lines from mods may be UTF-8 */
+#endif
     ps2_settings_defaults(&ps2_cfg);
     const char *dir = ".";
     const char *disc = NULL;

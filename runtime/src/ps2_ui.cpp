@@ -959,13 +959,14 @@ void tab_analog() {
     ImGui::TextWrapped("%s", L("These are PCSX2's DualShock 2 analog settings, and the game receives what "
                                "PCSX2 would send it for the same controller: sensitivity is applied first, "
                                "a stick inside the dead zone's circle reads as centred, and movement "
-                               "outside it is passed on as it is, not rescaled. The defaults are PCSX2's: "
-                               "no dead zone and 133% sensitivity. They apply to the mouse's stick "
-                               "movement too.",
+                               "outside it is passed on as it is, not rescaled. Defaults: no dead zone, "
+                               "50% anti-dead zone (the game ignores about half the stick's travel), "
+                               "100% sensitivity (PCSX2 uses 133%). The mouse's stick movement is "
+                               "affected too.",
                                "这些是 PCSX2 的 DualShock 2 模拟摇杆设置，游戏收到的数值与同一个手柄在 PCSX2 "
                                "上发出的相同：先乘以灵敏度，落在死区圆内的摇杆视为回中，圆外的移动原样传递，"
-                               "不重新缩放。默认值与 PCSX2 相同：无死区，灵敏度 133%。鼠标控制的摇杆也受这些"
-                               "设置影响。"));
+                               "不重新缩放。默认：无死区、反死区 50%（游戏会忽略约一半的摇杆行程）、灵敏度 100%"
+                               "（PCSX2 为 133%）。鼠标控制的摇杆同样适用。"));
     env_note("PS2_PAD_DEADZONE", L("overrides the analog dead zone", "它会覆盖摇杆死区"));
     if (!ps2_video_gamepad())
         ImGui::TextDisabled("%s", L("Connect a controller to see the live preview.",
@@ -1004,7 +1005,7 @@ void tab_analog() {
            "PCSX2 的 Button/Trigger Deadzone：扳机（或绑定到按键的摇杆）要推多远才算按下。"));
     ch |= combo(L("Invert left stick", "左摇杆反向"), &ps2_cfg.invert[0], INVERT, 4);
     ch |= combo(L("Invert right stick", "右摇杆反向"), &ps2_cfg.invert[1], INVERT, 4);
-    if (ImGui::Button(L("Reset to PCSX2 defaults", "恢复 PCSX2 默认值"))) {
+    if (ImGui::Button(L("Reset to defaults", "恢复默认值"))) {
         ps2_settings d;
         ps2_settings_defaults(&d);
         ps2_cfg.deadzone = d.deadzone;

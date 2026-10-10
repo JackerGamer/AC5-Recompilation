@@ -1,0 +1,21 @@
+name     = "Dead zone probe"
+version  = "2.1"
+author   = "JackerGamer"
+game     = "SLUS-20851"
+# Off by default.  Turn it on to measure; while it is on, its button belongs to it.
+enabled  = false
+
+[config]
+# The PS2 button that starts and stops each item: select, l3, r3, start, up, right,
+# down, left, l2, r2, l1, r1, triangle, circle, cross, square.  L3 is free in the
+# keyboard + mouse layout; bind a key to it in F4 -> Keyboard & mouse (T by default here).
+button    = "l3"
+# What to measure, in order.  ly+/ly- = left stick down/up, lx+/lx- = right/left,
+# ry+/ry-, rx+/rx- likewise for the right stick, l2/r2 = trigger pressure.
+# On the left stick's Y axis, "+" (down) pulls the nose up, away from the ground.
+sequence  = "ly+,lx+,rx+,ry+,l2,r2"
+# Percent of full travel added per step, and fields (1/60 s) per step.
+step      = "0.8"
+interval  = "15"
+# Seconds allowed for the reaction between seeing a response and pressing the button.
+reaction  = "1.0"
