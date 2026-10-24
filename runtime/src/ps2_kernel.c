@@ -1216,6 +1216,7 @@ static u64 field_ns(void) {
     return v;
 }
 
+static void vb_wait_signal(void);
 static void *vblank_timer(void *unused) {
     u64 last_seen = 0;
     u64 fns = field_ns();
@@ -1235,7 +1236,7 @@ static void *vblank_timer(void *unused) {
         now = mono_ns();
         if (now > deadline + 4ull * fns) deadline = now + fns;
         if (__atomic_load_n(&vblank_pending, __ATOMIC_RELAXED) < 4)
-            __atomic_fetch_add(&vblank_pending, 1, __ATOMIC_RELAXED);
+            { __atomic_fetch_add(&vblank_pending, 1, __ATOMIC_RELAXED); vb_wait_signal(); }
         else
             __atomic_fetch_add(&vblank_missed, 1, __ATOMIC_RELAXED);
         __atomic_fetch_add(&vblank_generated, 1, __ATOMIC_RELAXED);
@@ -1281,6 +1282,29 @@ void ps2_kernel_state_save(ps2_state_put put, void *ud) {
 void ps2_kernel_vblank(ps2_ctx *ctx) {
     (void)ctx;
     __atomic_fetch_add(&vblank_pending, 1, __ATOMIC_RELAXED);
+    vb_wait_signal();
+}
+
+static pthread_mutex_t vb_wait_lock = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t  vb_wait_cv = PTHREAD_COND_INITIALIZER;
+
+static void vb_wait_signal(void) {
+    pthread_mutex_lock(&vb_wait_lock);
+    pthread_cond_broadcast(&vb_wait_cv);
+    pthread_mutex_unlock(&vb_wait_lock);
+}
+
+void ps2_kernel_wait_vblank(u64 max_ns) {
+    struct timespec ts;
+    if (__atomic_load_n(&vblank_pending, __ATOMIC_RELAXED) || kernel_exit_requested) return;
+    clock_gettime(CLOCK_REALTIME, &ts);
+    ts.tv_nsec += (long)(max_ns % 1000000000ull);
+    ts.tv_sec += (time_t)(max_ns / 1000000000ull);
+    if (ts.tv_nsec >= 1000000000L) { ts.tv_sec++; ts.tv_nsec -= 1000000000L; }
+    pthread_mutex_lock(&vb_wait_lock);
+    if (!__atomic_load_n(&vblank_pending, __ATOMIC_RELAXED))
+        pthread_cond_timedwait(&vb_wait_cv, &vb_wait_lock, &ts);
+    pthread_mutex_unlock(&vb_wait_lock);
 }
 
 void ps2_kernel_poll_vblank(void) {
