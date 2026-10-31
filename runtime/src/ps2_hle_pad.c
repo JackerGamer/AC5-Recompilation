@@ -365,8 +365,8 @@ void hle_scePad2Read(ps2_ctx *ctx) {
     d[11] = (buttons >> PAD_CIRCLE)   & 1 ? 255 : 0;
     d[12] = (buttons >> PAD_CROSS)    & 1 ? 255 : 0;
     d[13] = (buttons >> PAD_SQUARE)   & 1 ? (st->sq ? st->sq : 255) : 0;
-    d[14] = (buttons >> PAD_L1)       & 1 ? 255 : 0;
-    d[15] = (buttons >> PAD_R1)       & 1 ? 255 : 0;
+    d[14] = (buttons >> PAD_L1) & 1 ? ((st->buttons >> PAD_L1) & 1 ? st->l1 : 255) : 0;
+    d[15] = (buttons >> PAD_R1) & 1 ? ((st->buttons >> PAD_R1) & 1 ? st->r1 : 255) : 0;
     d[16] = (buttons >> PAD_L2) & 1 ? ((st->buttons >> PAD_L2) & 1 ? st->l2 : 255) : 0;
     d[17] = (buttons >> PAD_R2) & 1 ? ((st->buttons >> PAD_R2) & 1 ? st->r2 : 255) : 0;
     if (buf) ps2_put_mem(buf, d, sizeof(d));
