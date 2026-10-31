@@ -228,6 +228,7 @@ static void sanitize(ps2_settings *s) {
     s->show_fps = s->show_fps != 0;
     s->ui_scale = clampf(s->ui_scale, 0.5f, 3.0f);
     s->block_input_in_menu = s->block_input_in_menu != 0;
+    s->square_latch = s->square_latch != 0;
     for (int a = 0; a < PS2_ACT_COUNT; a++)
         for (int k = 0; k < PS2_BIND_SLOTS; k++) {
             if (s->key[a][k] < 0 || s->key[a][k] >= SDL_SCANCODE_COUNT) s->key[a][k] = 0;
@@ -282,6 +283,7 @@ static const cfg_field fields[] = {
     FI("display", "show_fps", show_fps, "1 on"),
     FF("display", "menu_scale", ui_scale, "0.5..3"),
     FI("input", "block_game_input_in_menu", block_input_in_menu, "1 on"),
+    FI("input", "square_latch", square_latch, "1: each Square press steps half pressure, full, released"),
     FF("analog", "deadzone", deadzone, "PCSX2 Analog Deadzone, both sticks, 0..1"),
     FF("analog", "anti_deadzone", anti_deadzone, "minimum travel of each moved stick axis, both sticks, 0..0.9, 0 off"),
     FF("analog", "axis_scale", axis_scale, "PCSX2 Analog Sensitivity, 0.01..2 (default 1.33)"),

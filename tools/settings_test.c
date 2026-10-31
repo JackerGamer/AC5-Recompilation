@@ -147,6 +147,7 @@ int main(void) {
         a.pad[PS2_ACT_R2][1] = PS2_PADBIND_BUTTON(SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER);
         a.deadzone = 0.15f; a.axis_scale = 1.4f; a.button_deadzone = 0.2f;
         a.invert[0] = 2; a.invert[1] = 3; a.anti_deadzone = 0.3f; a.diagonal = 1;
+        a.square_latch = 1;
         a.internal_res = 0;
         a.preset = ps2_settings_preset_matches(&a);
         ps2_cfg = a;
@@ -168,6 +169,7 @@ int main(void) {
         CHECK(feq(b->deadzone, 0.15f) && feq(b->axis_scale, 1.4f) && feq(b->button_deadzone, 0.2f)
               && b->invert[0] == 2 && b->invert[1] == 3 && feq(b->anti_deadzone, 0.3f) && b->diagonal == 1,
               "analog fields did not round-trip");
+        CHECK(b->square_latch == 1, "the Square latch did not round-trip");
     }
 
     {
